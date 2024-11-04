@@ -9,6 +9,123 @@
     <link href="https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <style>
+        .score-container {
+            background: linear-gradient(135deg, var(--color-canvas-default), var(--color-canvas-subtle));
+            border-radius: 16px;
+            padding: 20px;
+            margin-bottom: 24px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+            border: 1px solid var(--color-border-default);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .score-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 20px;
+        }
+
+        .score-card {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 12px;
+            padding: 20px;
+            position: relative;
+            overflow: hidden;
+            transition: transform 0.3s ease;
+        }
+
+        .score-card:hover {
+            transform: translateY(-5px);
+        }
+
+        .score-value {
+            font-size: 2.5em;
+            font-weight: bold;
+            background: linear-gradient(45deg, var(--color-accent-fg), var(--color-done-fg));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin: 10px 0;
+        }
+
+        .score-label {
+            font-size: 1.2em;
+            color: var(--color-fg-muted);
+            margin-bottom: 5px;
+        }
+
+        .score-trend {
+            font-size: 0.9em;
+            color: var(--color-success-fg);
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        /* Floating change user button */
+        .change-user-button {
+            position: fixed;
+            bottom: 30px;
+            right: 30px;
+            background: linear-gradient(135deg, var(--color-accent-fg), var(--color-done-fg));
+            color: white;
+            padding: 12px 24px;
+            border-radius: 50px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            z-index: 1000;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .change-user-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
+        }
+
+        /* Sparkle animation */
+        @keyframes sparkle {
+
+            0%,
+            100% {
+                opacity: 0;
+            }
+
+            50% {
+                opacity: 1;
+            }
+        }
+
+        .sparkle {
+            position: absolute;
+            width: 4px;
+            height: 4px;
+            border-radius: 50%;
+            background: var(--color-accent-fg);
+            animation: sparkle 1.5s infinite;
+        }
+
+        .sparkle:nth-child(1) {
+            top: 20%;
+            left: 10%;
+            animation-delay: 0s;
+        }
+
+        .sparkle:nth-child(2) {
+            top: 60%;
+            right: 20%;
+            animation-delay: 0.4s;
+        }
+
+        .sparkle:nth-child(3) {
+            bottom: 30%;
+            left: 30%;
+            animation-delay: 0.8s;
+        }
+
         :root {
             --color-canvas-default: #0d1117;
             --color-canvas-subtle: #161b22;
@@ -302,6 +419,12 @@
     <!-- Dashboard Section -->
     <div id="dashboard" class="hidden container mx-auto px-4 py-8">
         <!-- Header -->
+        <div class="flex justify-between items-center">
+            <div class="flex items-center space-x-4">
+            </div>
+            <!-- Change User Button -->
+            <div class="change-user-button" onclick="changeUser()">Change User</div>
+        </div>
         <div class="flex justify-between items-center mb-8">
             <div class="flex items-center space-x-4">
                 <i class="fab fa-github text-3xl"></i>
@@ -514,10 +637,15 @@
         }
 
         async function loadData(username) {
+            const today = new Date().toISOString().split('T')[0];
+            const yesterday = new Date(new Date().setDate(new Date().getDate() - 1)).toISOString().split('T')[0];
+
             const queries = {
                 assignedIssues: `search/issues?q=is:issue+assignee:${username}+state:open&sort=created&order=desc`,
                 openPRs: `search/issues?q=is:pull-request+author:${username}+state:open&sort=created&order=desc`,
-                mergedPRs: `search/issues?q=is:pull-request+author:${username}+state:closed+is:merged&sort=created&order=desc`
+                mergedPRs: `search/issues?q=is:pull-request+author:${username}+state:closed+is:merged&sort=created&order=desc`,
+                todayMergedPRs: `search/issues?q=is:pull-request+author:${username}+state:closed+is:merged+merged:${today}&sort=created&order=desc`,
+                yesterdayMergedPRs: `search/issues?q=is:pull-request+author:${username}+state:closed+is:merged+merged:${yesterday}&sort=created&order=desc`
             };
 
             try {
@@ -527,21 +655,97 @@
                     )
                 );
 
-                const [assignedIssues, openPRs, mergedPRs] = results;
+                const [assignedIssues, openPRs, mergedPRs, todayMergedPRs, yesterdayMergedPRs] = results;
                 state.data = {
                     assignedIssues: { items: assignedIssues },
                     openPRs: { items: openPRs },
-                    mergedPRs: { items: mergedPRs }
+                    mergedPRs: { items: mergedPRs },
+                    todayMergedPRs: { items: todayMergedPRs },
+                    yesterdayMergedPRs: { items: yesterdayMergedPRs }
                 };
                 originalData = JSON.parse(JSON.stringify(state.data));
 
                 updateDashboard(username);
                 initializeSearch();
+                calculateDailyScores(todayMergedPRs, yesterdayMergedPRs);
             } catch (error) {
                 throw error;
             }
         }
 
+        function calculateDailyScores(todayMergedPRs, yesterdayMergedPRs) {
+            const labelPoints = {
+                level1: 10,
+                level2: 25,
+                level3: 45
+            };
+
+            const calculateScore = (mergedPRs) => {
+                return mergedPRs.reduce((score, pr) => {
+                    pr.labels.forEach(label => {
+                        const labelName = label.name.toLowerCase();
+                        if (labelPoints[labelName]) {
+                            score += labelPoints[labelName];
+                        }
+                    });
+                    return score;
+                }, 0);
+            };
+
+            const todayScore = calculateScore(todayMergedPRs);
+            const yesterdayScore = calculateScore(yesterdayMergedPRs);
+
+            displayDailyScores(todayScore, yesterdayScore);
+        }
+
+        function displayDailyScores(todayScore, yesterdayScore) {
+            const dashboard = document.getElementById('dashboard');
+            const scoreContainer = document.createElement('div');
+            scoreContainer.className = 'score-container';
+
+            // Calculate score difference and trend
+            const scoreDiff = todayScore - yesterdayScore;
+            const trendIcon = scoreDiff >= 0 ? '↑' : '↓';
+            const trendColor = scoreDiff >= 0 ? 'var(--color-success-fg)' : 'var(--color-attention-fg)';
+
+            scoreContainer.innerHTML = `
+                <div class="sparkle"></div>
+                <div class="sparkle"></div>
+                <div class="sparkle"></div>
+                <div class="score-grid">
+                    <div class="score-card">
+                        <div class="score-label">Today's Score</div>
+                        <div class="score-value">${todayScore}</div>
+                        <div class="score-trend" style="color: ${trendColor}">
+                            <i class="fas ${scoreDiff >= 0 ? 'fa-arrow-up' : 'fa-arrow-down'}"></i>
+                            ${Math.abs(scoreDiff)} points ${scoreDiff >= 0 ? 'increase' : 'decrease'}
+                        </div>
+                    </div>
+                    <div class="score-card">
+                        <div class="score-label">Yesterday's Score</div>
+                        <div class="score-value">${yesterdayScore}</div>
+                        <div class="text-sm text-fg-muted">Previous benchmark</div>
+                    </div>
+                </div>
+            `;
+
+            const existingScoreContainer = document.querySelector('.score-container');
+            if (existingScoreContainer) {
+                existingScoreContainer.replaceWith(scoreContainer);
+            } else {
+                dashboard.insertBefore(scoreContainer, dashboard.firstChild);
+            }
+        }
+
+        // Update the change user button creation
+        const changeUserBtn = document.createElement('div');
+        changeUserBtn.className = 'change-user-button';
+        changeUserBtn.innerHTML = `
+            <i class="fas fa-user-switch"></i>
+            Switch User
+        `;
+        changeUserBtn.onclick = changeUser;
+        document.body.appendChild(changeUserBtn);
         function showError(message) {
             const errorDiv = document.createElement('div');
             errorDiv.className = 'error-message';
@@ -726,16 +930,22 @@
             document.getElementById('merge-rate').textContent = `${mergeRate}%`;
             document.getElementById('active-repos').textContent = activeRepos;
         }
+        function changeUser() {
+            resetDashboard();
+        }
 
         function resetDashboard() {
             state.data = {};
             originalData = {};
             document.getElementById('username-section').style.display = 'flex';
             document.getElementById('dashboard').style.display = 'none';
-            if (document.getElementById('dashboard-search')) {
-                document.getElementById('dashboard-search').value = '';
+            document.getElementById('loading').classList.add('hidden');
+            const searchBar = document.getElementById('dashboard-search');
+            if (searchBar) {
+                searchBar.value = '';
             }
         }
+
     </script>
 
 </body>
